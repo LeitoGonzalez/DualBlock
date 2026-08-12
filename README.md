@@ -189,16 +189,6 @@ dualblock/
 
 ---
 
-## Publicar en Chrome Web Store
-
-1. Revisar `manifest.json`: asegurar que `version`, `name` y `description` estén completos.
-2. Reemplazar los iconos en `icons/` por diseños finales en PNG.
-3. Comprimir la carpeta del proyecto en un `.zip` (sin incluir archivos del sistema ni `.git`).
-4. Subir el `.zip` al [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
-5. Completar la ficha de la extensión: capturas de pantalla, descripción, política de privacidad.
-
----
-
 ## Limitaciones conocidas de Chrome
 
 | Limitación | Impacto |
