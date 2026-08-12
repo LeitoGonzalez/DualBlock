@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DualBlock — Configuración</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+
+  <!-- ── Encabezado ─────────────────────────────────────────────────────── -->
+  <header class="page-header">
+    <div class="header-inner">
+      <img src="icons/icon48.png" alt="DualBlock" class="header-logo" />
+      <div class="header-text">
+        <h1 class="header-title">DualBlock</h1>
+        <p class="header-subtitle">Protección contra pestañas duplicadas</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Contenido principal ───────────────────────────────────────────── -->
+  <main class="page-content">
+
+    <!-- ── 1. Protección principal ───────────────────────────────────── -->
+    <section class="card" id="section-main-toggle">
+      <div class="card-row card-row--spread">
+        <div>
+          <h2 class="card-title">Protección contra pestañas duplicadas</h2>
+          <p class="card-desc" id="main-toggle-status-text">
+            Monitoreando pestañas en los sitios protegidos.
+          </p>
+        </div>
+        <label class="toggle" aria-label="Activar o desactivar protección">
+          <input type="checkbox" id="toggle-enabled" />
+          <span class="toggle-track">
+            <span class="toggle-thumb"></span>
+          </span>
+          <span class="toggle-label" id="toggle-label-text">ACTIVADA</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- ── 2. Sitios protegidos ──────────────────────────────────────── -->
+    <section class="card" id="section-sites">
+      <h2 class="card-title">Sitios protegidos</h2>
+      <p class="card-desc">
+        La extensión solo actúa en estos dominios. Agregá cualquier sitio web donde quieras evitar pestañas duplicadas.
+      </p>
+
+      <ul class="site-list" id="site-list" role="list">
+        <!-- Generado dinámicamente por options.js -->
+      </ul>
+
+      <!-- Formulario para agregar sitio -->
+      <div class="add-site-form" id="add-site-form">
+        <input
+          type="text"
+          id="new-site-input"
+          class="text-input"
+          placeholder="ej: app.miempresa.com"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="253"
+          aria-label="Nuevo dominio a proteger"
+        />
+        <button class="btn btn--primary" id="btn-add-site" type="button">
+          + Agregar sitio
+        </button>
+      </div>
+      <p class="field-error hidden" id="add-site-error" role="alert"></p>
+    </section>
+
+    <!-- ── 3. Modo de detección ──────────────────────────────────────── -->
+    <section class="card" id="section-comparison">
+      <h2 class="card-title">Modo de detección</h2>
+      <p class="card-desc">¿Cuándo se consideran dos pestañas como duplicadas?</p>
+
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="comparison-mode" id="mode-exact" value="exact" />
+          <span class="radio-content">
+            <span class="radio-title">
+              URL exacta
+              <span class="badge">Predeterminado</span>
+            </span>
+            <span class="radio-desc">
+              Compara protocolo, dominio, ruta, parámetros de consulta y hash completos.
+              Dos pestañas con la misma página pero distinto parámetro
+              (<code>?cliente=123</code>) <strong>no</strong> se consideran duplicadas.
+            </span>
+          </span>
+        </label>
+
+        <label class="radio-option">
+          <input type="radio" name="comparison-mode" id="mode-ignore" value="ignore-params" />
+          <span class="radio-content">
+            <span class="radio-title">Misma página ignorando parámetros</span>
+            <span class="radio-desc">
+              Compara solo protocolo, dominio y ruta.
+              Dos pestañas de la misma pantalla con distinto parámetro
+              (<code>?cliente=123</code> vs <code>?cliente=456</code>)
+              <strong>sí</strong> se consideran duplicadas.
+            </span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <!-- ── 4. Comportamiento al detectar duplicado ───────────────────── -->
+    <section class="card" id="section-behavior">
+      <h2 class="card-title">Al detectar un duplicado</h2>
+
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="behavior" id="behavior-close" value="close" />
+          <span class="radio-content">
+            <span class="radio-title">
+              Cerrar duplicada y volver a la pestaña original
+              <span class="badge">Predeterminado</span>
+            </span>
+            <span class="radio-desc">
+              La pestaña duplicada se cierra inmediatamente y se activa la original.
+            </span>
+          </span>
+        </label>
+
+        <label class="radio-option">
+          <input type="radio" name="behavior" id="behavior-warn" value="warn" />
+          <span class="radio-content">
+            <span class="radio-title">Mostrar advertencia antes de cerrar</span>
+            <span class="radio-desc">
+              Se muestra una notificación con opciones. La pestaña duplicada
+              se cierra automáticamente tras 8 segundos si no se toma ninguna acción.
+            </span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <!-- ── 5. Notificaciones ─────────────────────────────────────────── -->
+    <section class="card" id="section-notifications">
+      <h2 class="card-title">Notificaciones</h2>
+
+      <label class="checkbox-option">
+        <input type="checkbox" id="toggle-notifications" />
+        <span class="checkbox-content">
+          <span class="checkbox-title">Mostrar aviso cuando se bloquee una pestaña duplicada</span>
+          <span class="checkbox-desc">
+            Aparece una notificación breve con la opción "Ir a la pestaña existente".
+          </span>
+        </span>
+      </label>
+    </section>
+
+    <!-- ── 6. Estadísticas ───────────────────────────────────────────── -->
+    <section class="card" id="section-stats">
+      <h2 class="card-title">Estadísticas</h2>
+      <div class="stats-row">
+        <div class="stat-item">
+          <span class="stat-value" id="stat-blocked">0</span>
+          <span class="stat-label">Duplicados bloqueados</span>
+        </div>
+        <button class="btn btn--ghost" id="btn-reset-stats" type="button">
+          Restablecer contador
+        </button>
+      </div>
+    </section>
+
+    <!-- ── Pie informativo ───────────────────────────────────────────── -->
+    <footer class="page-footer">
+      <p>
+        Las pestañas con <strong>diferentes URLs</strong> nunca se ven afectadas.
+        Solo se cierra una pestaña si hay otra con exactamente la misma dirección ya abierta.
+      </p>
+      <p class="footer-privacy">
+        🔒 Toda la información permanece en tu navegador.
+        No se envían datos a ningún servidor externo.
+      </p>
+    </footer>
+
+  </main>
+
+  <!-- Toast de confirmación (feedback al guardar) -->
+  <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>
