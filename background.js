@@ -46,6 +46,15 @@ let settings = { ...DEFAULT_SETTINGS };
 const processingTabs = new Set();
 
 /**
+ * IDs de pestañas recién creadas (aún no han recibido su primer onUpdated).
+ * Permite distinguir entre:
+ *   - Navegación en la misma pestaña → tab NO está en este Set → volver atrás
+ *   - Nueva pestaña duplicada        → tab SÍ está en este Set → cerrar
+ * Se limpia en onUpdated (tras leer el flag) y en onRemoved como safety net.
+ */
+const newlyCreatedTabs = new Set();
+
+/**
  * Timers pendientes del modo "advertencia".
  * Mapa: tabId → { timerId, notifId, originalTab, url }
  * Nota: los setTimeout no sobreviven a la terminación del service worker;
@@ -251,17 +260,35 @@ function showBlockedNotification(originalTabId, originalWindowId, url) {
 // ─── Acciones sobre pestañas ──────────────────────────────────────────────────
 
 /**
- * Cierra la pestaña duplicada y activa la pestaña original.
+ * Maneja la pestaña duplicada según cómo fue originada:
+ *
+ *   isNewTab = true  → la pestaña fue recién creada (Ctrl+click, "abrir en nueva pestaña", etc.)
+ *                      → se cierra y se enfoca la original (comportamiento original).
+ *
+ *   isNewTab = false → una pestaña existente navegó a una URL ya abierta (click normal)
+ *                      → se vuelve atrás en el historial para no perder la pestaña actual.
+ *                      Si no hay historial previo (tab abierta directamente en esa URL),
+ *                      goBack() no hace nada; la pestaña queda donde está.
  *
  * @param {number} duplicateTabId
  * @param {chrome.tabs.Tab} originalTab
  * @param {string} url
+ * @param {boolean} isNewTab
  */
-async function closeDuplicateAndFocus(duplicateTabId, originalTab, url) {
-  try {
-    await chrome.tabs.remove(duplicateTabId);
-  } catch {
-    // La pestaña puede haberse cerrado ya; continuar de todos modos
+async function closeDuplicateAndFocus(duplicateTabId, originalTab, url, isNewTab) {
+  if (isNewTab) {
+    try {
+      await chrome.tabs.remove(duplicateTabId);
+    } catch {
+      // La pestaña puede haberse cerrado ya; continuar de todos modos
+    }
+  } else {
+    // Volver atrás en la pestaña que navegó al duplicado
+    try {
+      await chrome.tabs.goBack(duplicateTabId);
+    } catch {
+      // goBack puede fallar si no hay historial; la pestaña queda donde está
+    }
   }
 
   try {
@@ -281,11 +308,12 @@ async function closeDuplicateAndFocus(duplicateTabId, originalTab, url) {
  * @param {number} duplicateTabId
  * @param {chrome.tabs.Tab} originalTab
  * @param {string} url
+ * @param {boolean} isNewTab
  */
-async function handleWarnMode(duplicateTabId, originalTab, url) {
-  // Sin notificaciones habilitadas, cerrar directamente
+async function handleWarnMode(duplicateTabId, originalTab, url, isNewTab) {
+  // Sin notificaciones habilitadas, actuar directamente
   if (!settings.showNotifications) {
-    await closeDuplicateAndFocus(duplicateTabId, originalTab, url);
+    await closeDuplicateAndFocus(duplicateTabId, originalTab, url, isNewTab);
     return;
   }
 
@@ -310,20 +338,20 @@ async function handleWarnMode(duplicateTabId, originalTab, url) {
     priority: 2,
   }, () => {
     if (chrome.runtime.lastError) {
-      // Si no se pudo crear la notificación, cerrar directamente
-      closeDuplicateAndFocus(duplicateTabId, originalTab, url);
+      // Si no se pudo crear la notificación, actuar directamente
+      closeDuplicateAndFocus(duplicateTabId, originalTab, url, isNewTab);
       return;
     }
   });
 
-  // Timer de auto-cierre
+  // Timer de auto-acción
   const timerId = setTimeout(async () => {
     warnTimers.delete(duplicateTabId);
     chrome.notifications.clear(notifId).catch(() => {});
-    await closeDuplicateAndFocus(duplicateTabId, originalTab, url);
+    await closeDuplicateAndFocus(duplicateTabId, originalTab, url, isNewTab);
   }, WARN_TIMEOUT_MS);
 
-  warnTimers.set(duplicateTabId, { timerId, notifId, originalTab, url });
+  warnTimers.set(duplicateTabId, { timerId, notifId, originalTab, url, isNewTab });
 
   // Handler de botones de la notificación
   const onButton = async (id, btnIndex) => {
@@ -340,8 +368,8 @@ async function handleWarnMode(duplicateTabId, originalTab, url) {
     chrome.notifications.clear(notifId).catch(() => {});
 
     if (btnIndex === 0) {
-      // Cerrar y enfocar original
-      await closeDuplicateAndFocus(duplicateTabId, originalTab, url);
+      // Volver atrás o cerrar según origen
+      await closeDuplicateAndFocus(duplicateTabId, originalTab, url, isNewTab);
     } else {
       // Mantener ambas; liberar el bloqueo de procesamiento
       processingTabs.delete(duplicateTabId);
@@ -366,17 +394,19 @@ async function handleWarnMode(duplicateTabId, originalTab, url) {
  * @param {number} duplicateTabId
  * @param {chrome.tabs.Tab} originalTab
  * @param {string} url
+ * @param {boolean} isNewTab - true si la pestaña fue recién creada (nueva pestaña);
+ *                             false si es una pestaña existente que navegó a la URL duplicada.
  */
-async function handleDuplicate(duplicateTabId, originalTab, url) {
+async function handleDuplicate(duplicateTabId, originalTab, url, isNewTab) {
   processingTabs.add(duplicateTabId);
 
   try {
     await incrementBlockedCount();
 
     if (settings.behaviorOnDuplicate === 'warn') {
-      await handleWarnMode(duplicateTabId, originalTab, url);
+      await handleWarnMode(duplicateTabId, originalTab, url, isNewTab);
     } else {
-      await closeDuplicateAndFocus(duplicateTabId, originalTab, url);
+      await closeDuplicateAndFocus(duplicateTabId, originalTab, url, isNewTab);
     }
   } finally {
     // Liberar el bloqueo con un pequeño retraso para absorber los eventos
@@ -395,8 +425,9 @@ async function handleDuplicate(duplicateTabId, originalTab, url) {
  *
  * @param {number} tabId
  * @param {string} url
+ * @param {boolean} isNewTab - true si la pestaña fue recién creada; false si navegó in-place.
  */
-async function checkTab(tabId, url) {
+async function checkTab(tabId, url, isNewTab) {
   if (!settings.enabled)    return;
   if (isSystemUrl(url))     return;
   if (!isProtectedUrl(url)) return;
@@ -405,7 +436,7 @@ async function checkTab(tabId, url) {
   const originalTab = await findOriginalTab(tabId, url);
   if (!originalTab) return;
 
-  await handleDuplicate(tabId, originalTab, url);
+  await handleDuplicate(tabId, originalTab, url, isNewTab);
 }
 
 // ─── Verificación inicial de pestañas existentes ──────────────────────────────
@@ -480,13 +511,16 @@ async function loadSettings() {
 
 /**
  * Nueva pestaña creada.
+ * Se registra en newlyCreatedTabs para distinguirla de una navegación in-place.
  * A veces Chrome asigna la URL en el momento de creación (e.g. abrir enlace
  * en nueva pestaña en segundo plano). Se verifica si la URL ya está asignada.
  */
 chrome.tabs.onCreated.addListener((tab) => {
+  newlyCreatedTabs.add(tab.id);
+
   const url = tab.url || tab.pendingUrl;
   if (url && !isSystemUrl(url)) {
-    checkTab(tab.id, url);
+    checkTab(tab.id, url, true);
   }
 });
 
@@ -497,12 +531,19 @@ chrome.tabs.onCreated.addListener((tab) => {
  *   - Navegación normal (incluyendo F5 / actualización)
  *   - Pegar URL en la barra de direcciones
  *   - Abrir desde favoritos / historial
- *   - Abrir desde un enlace (en la misma pestaña)
+ *   - Abrir desde un enlace (en la misma pestaña o nueva pestaña)
  *   - Cambios de URL SPA si el navegador los propaga a tabs.onUpdated
+ *
+ * Si el tabId está en newlyCreatedTabs → es una tab nueva → isNewTab = true (cerrar).
+ * Si no está → la tab ya existía y navegó in-place → isNewTab = false (volver atrás).
+ * Se elimina de newlyCreatedTabs aquí porque onUpdated es el primer evento
+ * relevante tras onCreated; ya no se necesita el marcador.
  */
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!changeInfo.url) return;
-  checkTab(tabId, changeInfo.url);
+  const isNewTab = newlyCreatedTabs.has(tabId);
+  newlyCreatedTabs.delete(tabId);
+  checkTab(tabId, changeInfo.url, isNewTab);
 });
 
 /**
@@ -511,6 +552,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
  */
 chrome.tabs.onRemoved.addListener((tabId) => {
   processingTabs.delete(tabId);
+  newlyCreatedTabs.delete(tabId);
 
   const entry = warnTimers.get(tabId);
   if (entry) {

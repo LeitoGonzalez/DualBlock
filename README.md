@@ -8,11 +8,16 @@ Ideal para ERPs, CRMs, sistemas de facturación o cualquier aplicación web dond
 
 ## ¿Qué hace?
 
-Cuando se abre una pestaña con la misma URL que otra ya existente en un sitio protegido:
+Cuando se detecta una URL duplicada en un sitio protegido, la extensión reacciona de forma diferente según cómo se originó la duplicación:
 
-1. **Cierra la pestaña duplicada** (o muestra una advertencia, según configuración).
-2. **Activa y enfoca** la pestaña original.
-3. **Muestra una notificación breve** con la opción "Ir a la pestaña existente".
+| Situación | Comportamiento |
+|-----------|---------------|
+| **Click normal** (la pestaña actual navega a una URL ya abierta) | Vuelve atrás en el historial, preservando la pestaña actual |
+| **Nueva pestaña** (Ctrl+click, click del medio, "Abrir en nueva pestaña") | Cierra la nueva pestaña y enfoca la ya existente |
+
+En ambos casos:
+- **Activa y enfoca** la pestaña original.
+- **Muestra una notificación breve** con la opción "Ir a la pestaña existente".
 
 Las pestañas con **URLs diferentes** nunca se ven afectadas.
 
@@ -72,8 +77,8 @@ La extensión también protege subdominios. Si agregás `empresa.com`, también 
 
 ### Al detectar un duplicado
 
-- **Cerrar duplicada y volver a la original** (predeterminado): cierre inmediato.
-- **Mostrar advertencia antes de cerrar**: notificación con botones. Si no se toma ninguna acción en 8 segundos, la pestaña se cierra automáticamente.
+- **Cerrar duplicada / volver atrás** (predeterminado): acción inmediata. Si la duplicación fue por nueva pestaña → se cierra; si fue por navegación in-place → vuelve atrás en el historial.
+- **Mostrar advertencia antes de actuar**: notificación con botones. Si no se toma ninguna acción en 8 segundos, se aplica la acción correspondiente automáticamente.
 
 ### Notificaciones
 Muestra un aviso del sistema cuando se bloquea una pestaña. El aviso incluye el botón "Ir a la pestaña existente".
@@ -89,9 +94,12 @@ La extensión escucha tres eventos de Chrome:
 
 | Evento | Qué detecta |
 |--------|-------------|
-| `tabs.onCreated` | Nueva pestaña con URL ya asignada al momento de creación |
-| `tabs.onUpdated` | Cambio de URL dentro de una pestaña existente (navegación, pegar URL, favoritos, historial, F5) |
+| `tabs.onCreated` | Nueva pestaña creada; se registra su ID para saber que es una tab nueva |
+| `tabs.onUpdated` | Cambio de URL en una pestaña; determina si es tab nueva (cerrar) o navegación in-place (volver atrás) |
 | `tabs.onRemoved` | Cierre de pestaña (para limpiar estado interno) |
+
+**Distinción nueva pestaña vs. navegación in-place:**
+Cuando `tabs.onCreated` dispara, el ID de la pestaña se guarda en un Set interno. Si el siguiente `tabs.onUpdated` para ese ID ocurre mientras aún está en el Set → es una **nueva pestaña** → se cierra. Si `tabs.onUpdated` dispara para un ID que no está en el Set → la pestaña ya existía y el usuario navegó desde ella → se vuelve atrás con `chrome.tabs.goBack()`.
 
 Al instalar la extensión o al arrancar Chrome, también revisa las pestañas ya abiertas y cierra duplicados de forma determinista: conserva la de **menor ID** (la más antigua) y cierra las demás.
 
@@ -202,4 +210,4 @@ dualblock/
 
 ## Versión
 
-**1.0.0** — Versión inicial
+**1.0.1** — Versión inicial
